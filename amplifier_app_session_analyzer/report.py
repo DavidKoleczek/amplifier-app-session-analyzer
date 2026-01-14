@@ -34,6 +34,7 @@ def generate_report(
     overlap_metrics: OverlapMetrics | None,
     time_scope: TimeScope,
     output_path: Path,
+    semantic_metrics: object | None = None,
 ) -> None:
     """Generate a PDF report for autonomy and overlap metrics.
 
@@ -42,7 +43,11 @@ def generate_report(
         overlap_metrics: Calculated overlap metrics (or None if no data)
         time_scope: The time scope that was analyzed
         output_path: Path to write the PDF
+        semantic_metrics: Optional semantic analysis metrics (not yet supported in PDF)
     """
+    # Note: semantic_metrics is accepted but not yet rendered in PDF format
+    # Use markdown format (--format md) for full semantic analysis output
+    _ = semantic_metrics  # Silence unused parameter warning
     doc = SimpleDocTemplate(
         str(output_path),
         pagesize=letter,
@@ -75,7 +80,7 @@ def generate_report(
 
     # Report metadata
     tz = ZoneInfo(time_scope.timezone)
-    generated_at = datetime.now(tz).strftime("%Y-%m-%d %H:%M:%S %Z")
+    generated_at = datetime.now(tz).strftime("%Y-%m-%d %H:%M %Z")
     elements.append(
         Paragraph(f"<b>{C.LABEL_GENERATED}</b> {generated_at}", normal_style)
     )
@@ -111,7 +116,8 @@ def generate_report(
 
         stats_data = [
             [C.LABEL_METRIC, C.LABEL_VALUE],
-            [C.LABEL_TOTAL_PROMPTS, str(metrics.count)],
+            [C.LABEL_TOTAL_PROMPTS, str(metrics.total_prompts_sent)],
+            ["Completed Periods", str(metrics.completed_periods)],
             [C.LABEL_UNIQUE_SESSIONS, str(metrics.unique_sessions)],
             [C.LABEL_MEAN_DURATION, format_duration(metrics.mean_seconds)],
             [C.LABEL_MEDIAN_DURATION, format_duration(metrics.median_seconds)],
@@ -147,7 +153,7 @@ def generate_report(
         elements.append(Paragraph(C.HEADING_DISTRIBUTION, heading_style))
         elements.append(Paragraph(C.DESC_DISTRIBUTION, normal_style))
 
-        total = metrics.count
+        total = metrics.completed_periods
         dist_data = [
             [C.LABEL_DURATION_RANGE, C.LABEL_COUNT, C.LABEL_PERCENTAGE],
             [

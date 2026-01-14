@@ -73,3 +73,7 @@ METHODOLOGY_DATA_SOURCE = """\
 Metrics are computed by parsing Amplifier session event logs (events.jsonl) \
 from ~/.amplifier/projects/. Only user-initiated sessions are included; \
 agent delegation sub-sessions are excluded from the analysis."""
+
+# Semantic analysis configuration
+SEMANTIC_BATCH_SIZE = 20  # Number of prompts to classify per LLM request
+SEMANTIC_CONTEXT_WINDOW = 2  # Number of surrounding messages for context

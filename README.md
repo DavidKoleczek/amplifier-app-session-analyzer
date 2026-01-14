@@ -1,6 +1,6 @@
 # Amplifier Session Analyzer
 
-Analyze Amplifier session logs and generate PDF reports on agent autonomy metrics.
+Analyze Amplifier session logs and generate reports on agent autonomy metrics.
 
 ## Installation
 
@@ -25,12 +25,14 @@ uv tool install git+https://github.com/DavidKoleczek/amplifier-app-session-analy
 ## Usage
 
 ```bash
-# Analyze with all options
 amplifier-session-analyzer \
-  --time-scope "2026/01/10 - 2026/01/12" \
-  --timezone "America/Los_Angeles" \
-  --sessions-path /path/to/amplifier/projects \
-  --output my-report.pdf
+  --time-scope "2026/01/10 - 2026/01/14" \
+  --timezone "America/New_York" \
+  --format html \
+  --output my-report.html \
+  --sessions-path ~/.amplifier/projects \
+  --exclude-project "session-analyzer" \
+  --features semantic_categories
 ```
 
 ## Options
@@ -39,15 +41,19 @@ amplifier-session-analyzer \
 |--------|---------|-------------|
 | `-t, --time-scope` | `default` | Time period: 'default' (last full week), 'YYYY/MM/DD', or 'YYYY/MM/DD - YYYY/MM/DD' |
 | `-z, --timezone` | `America/New_York` | IANA timezone for interpreting dates |
-| `-f, --format` | `md` | Output format: 'md' (Markdown) or 'pdf' |
+| `-f, --format` | `md` | Output format: 'md' (Markdown), 'html', or 'pdf' |
 | `-p, --sessions-path` | `~/.amplifier/projects` | Path to Amplifier projects directory |
-| `-o, --output` | `autonomy-report.md` | Output file path (extension matches format) |
+| `-o, --output` | `autonomy-report.<format>` | Output file path |
+| `-x, --exclude-project` | (none) | Exclude projects matching pattern (can be used multiple times) |
+| `-F, --features` | (none) | Enable optional features (e.g., `semantic_categories`) |
 
 ## What It Measures
 
-**Autonomy Duration**: How long the AI agent works autonomously after receiving a user message, until it returns control to the user. Calculated as the time from `prompt:submit` to `prompt:complete`.
+**Autonomy Duration**: How long the AI agent works autonomously after receiving a user message, until it returns control to the user.
 
 **Session Overlaps**: How often the user starts a new prompt in one session while another session is still processing, and the maximum number of parallel sessions observed.
+
+**Semantic Categories**: When enabled with `-F semantic_categories`, uses an LLM to classify each user prompt into categories like question, implementation, debugging, review, exploration, etc.
 
 ## Development
 

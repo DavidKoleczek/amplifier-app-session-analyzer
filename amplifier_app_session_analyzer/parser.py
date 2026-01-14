@@ -36,6 +36,7 @@ class SessionInfo:
     session_id: str
     session_path: Path
     autonomy_periods: list[AutonomyPeriod] = field(default_factory=list)
+    total_prompts_in_scope: int = 0  # All prompt:submit events in time scope
 
 
 def get_amplifier_projects_dir() -> Path:
@@ -55,10 +56,27 @@ def is_sub_session(session_id: str) -> bool:
     return "_" in session_id
 
 
-def discover_sessions(projects_dir: Path | None = None) -> list[Path]:
+def _matches_exclude_pattern(project_name: str, exclude_patterns: list[str]) -> bool:
+    """Check if a project name matches any exclude pattern.
+
+    Patterns are matched as substrings (case-insensitive).
+    """
+    project_lower = project_name.lower()
+    return any(pattern.lower() in project_lower for pattern in exclude_patterns)
+
+
+def discover_sessions(
+    projects_dir: Path | None = None,
+    exclude_projects: list[str] | None = None,
+) -> list[Path]:
     """Discover all session directories.
 
-    Returns paths to session directories (containing events.jsonl).
+    Args:
+        projects_dir: Override the default projects directory
+        exclude_projects: List of patterns to exclude (matched against project names)
+
+    Returns:
+        Paths to session directories (containing events.jsonl).
     """
     if projects_dir is None:
         projects_dir = get_amplifier_projects_dir()
@@ -70,6 +88,13 @@ def discover_sessions(projects_dir: Path | None = None) -> list[Path]:
     for project_dir in projects_dir.iterdir():
         if not project_dir.is_dir():
             continue
+
+        # Check if this project should be excluded
+        if exclude_projects and _matches_exclude_pattern(
+            project_dir.name, exclude_projects
+        ):
+            continue
+
         sessions_dir = project_dir / "sessions"
         if not sessions_dir.exists():
             continue
@@ -112,13 +137,18 @@ def parse_session_events(session_path: Path, time_scope: TimeScope) -> SessionIn
                 if not ts_str:
                     continue
 
+                ts = parse_iso_timestamp(ts_str)
+
                 if event == "prompt:submit":
-                    submits.append(parse_iso_timestamp(ts_str))
+                    submits.append(ts)
                 elif event == "prompt:complete":
-                    completes.append(parse_iso_timestamp(ts_str))
+                    completes.append(ts)
             except (json.JSONDecodeError, ValueError):
                 # Skip malformed lines
                 continue
+
+    # Count total prompts in scope (all prompt:submit events)
+    total_prompts_in_scope = sum(1 for ts in submits if time_scope.contains(ts))
 
     # Pair submits with completes to create autonomy periods
     # They should be in order: submit1, complete1, submit2, complete2, ...
@@ -141,26 +171,38 @@ def parse_session_events(session_path: Path, time_scope: TimeScope) -> SessionIn
         session_id=session_id,
         session_path=session_path,
         autonomy_periods=autonomy_periods,
+        total_prompts_in_scope=total_prompts_in_scope,
     )
+
+
+@dataclass
+class CollectedAutonomyData:
+    """Data collected from all sessions."""
+
+    periods: list[AutonomyPeriod]
+    total_prompts_sent: int  # All prompt:submit events across all sessions
 
 
 def collect_autonomy_periods(
     time_scope: TimeScope,
     projects_dir: Path | None = None,
     include_sub_sessions: bool = False,
-) -> list[AutonomyPeriod]:
+    exclude_projects: list[str] | None = None,
+) -> CollectedAutonomyData:
     """Collect all autonomy periods from all sessions within the time scope.
 
     Args:
         time_scope: Time range to filter by
         projects_dir: Override the default projects directory
         include_sub_sessions: If False (default), exclude agent delegation sub-sessions
+        exclude_projects: List of patterns to exclude (matched against project names)
 
     Returns:
-        List of all autonomy periods within scope, sorted by start time
+        CollectedAutonomyData with periods and total prompt count
     """
-    session_paths = discover_sessions(projects_dir)
+    session_paths = discover_sessions(projects_dir, exclude_projects)
     all_periods: list[AutonomyPeriod] = []
+    total_prompts = 0
 
     for session_path in session_paths:
         session_id = session_path.name
@@ -171,7 +213,8 @@ def collect_autonomy_periods(
 
         session_info = parse_session_events(session_path, time_scope)
         all_periods.extend(session_info.autonomy_periods)
+        total_prompts += session_info.total_prompts_in_scope
 
     # Sort by start time
     all_periods.sort(key=lambda p: p.start)
-    return all_periods
+    return CollectedAutonomyData(periods=all_periods, total_prompts_sent=total_prompts)

@@ -28,8 +28,13 @@ class OverlapMetrics:
 class AutonomyMetrics:
     """Aggregated metrics about agent autonomy."""
 
-    # Core statistics (in seconds)
-    count: int  # Number of autonomy periods
+    # Prompt counts
+    total_prompts_sent: int  # Total prompt:submit events
+    completed_periods: (
+        int  # Number of completed autonomy periods (with prompt:complete)
+    )
+
+    # Core statistics (in seconds) - based on completed periods only
     total_seconds: float  # Sum of all autonomy durations
     mean_seconds: float
     median_seconds: float
@@ -61,17 +66,37 @@ class AutonomyMetrics:
         return self.total_seconds / 60
 
 
-def calculate_metrics(periods: list[AutonomyPeriod]) -> AutonomyMetrics | None:
+def calculate_metrics(
+    periods: list[AutonomyPeriod], total_prompts_sent: int
+) -> AutonomyMetrics | None:
     """Calculate aggregated metrics from autonomy periods.
 
     Args:
         periods: List of autonomy periods to analyze
+        total_prompts_sent: Total number of prompt:submit events
 
     Returns:
-        AutonomyMetrics with computed statistics, or None if no periods
+        AutonomyMetrics with computed statistics, or None if no data
     """
-    if not periods:
+    if not periods and total_prompts_sent == 0:
         return None
+
+    # Handle case where we have prompts but no completed periods
+    if not periods:
+        return AutonomyMetrics(
+            total_prompts_sent=total_prompts_sent,
+            completed_periods=0,
+            total_seconds=0,
+            mean_seconds=0,
+            median_seconds=0,
+            max_seconds=0,
+            stdev_seconds=None,
+            under_1min=0,
+            between_1_5min=0,
+            between_5_15min=0,
+            over_15min=0,
+            unique_sessions=0,
+        )
 
     durations = [p.duration_seconds for p in periods]
     unique_sessions = len(set(p.session_id for p in periods))
@@ -86,7 +111,8 @@ def calculate_metrics(periods: list[AutonomyPeriod]) -> AutonomyMetrics | None:
     stdev_val = stdev(durations) if len(durations) >= 2 else None
 
     return AutonomyMetrics(
-        count=len(durations),
+        total_prompts_sent=total_prompts_sent,
+        completed_periods=len(durations),
         total_seconds=sum(durations),
         mean_seconds=mean(durations),
         median_seconds=median(durations),
